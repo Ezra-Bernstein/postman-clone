@@ -1,6 +1,7 @@
 import "bootstrap";
 import "bootstrap/dist/css/bootstrap.min.css";
 import axios from "axios";
+import prettyBytes from "pretty-bytes";
 
 const form = document.querySelector("[data-form]");
 const queryParamsContainer = document.querySelector("[data-query-params]");
@@ -8,6 +9,7 @@ const requestHeadersContainer = document.querySelector(
   "[data-request-headers]"
 );
 const keyValueTemplate = document.querySelector("[data-key-value-template]");
+const responseHeadersContainer = document.querySelector("[data-response-headers]");
 
 document
   .querySelector("[data-add-query-param-btn]")
@@ -23,6 +25,22 @@ document
 queryParamsContainer.append(createKeyValuePair());
 requestHeadersContainer.append(createKeyValuePair());
 
+axios.interceptors.request.use(request => {
+  request.customData = request.customData || {};
+  request.customData.startTime = new Date().getTime();
+  return request
+})
+
+axios.interceptors.response.use(updateEndTime, e => {
+  return Promise.reject(updateEndTime(e.response))
+})
+
+function updateEndTime(response) {
+  response.customData = response.customData || {};
+  response.customData.time = new Date().getTime() - response.config.customData.startTime
+  return response
+}
+
 form.addEventListener("submit", (e) => {
   e.preventDefault();
 
@@ -31,8 +49,39 @@ form.addEventListener("submit", (e) => {
     method: document.querySelector("[data-method]").value,
     params: keyValuePairsToObjects(queryParamsContainer),
     headers: keyValuePairsToObjects(requestHeadersContainer),
-  }).then((response) => console.log(response));
+  }).catch(e => e).then((response) => {
+
+    document.querySelector("[data-response-section]").classList.remove('d-none')
+    updateResponseDetails(response)
+    // updateResponseEditor(response.data)
+    updateResponseHeaders(response.headers)
+
+    console.log(response)
+  }
+  
+  
+  );
 });
+
+
+function updateResponseDetails(response) {
+  document.querySelector('[data-status]').textContent = response.status
+  document.querySelector('[data-time]').textContent = response.customData.time
+  document.querySelector('[data-size]').textContent = prettyBytes(
+    JSON.stringify(response.data).length + JSON.stringify(response.headers).length)
+}
+
+function updateResponseHeaders(headers) {
+  responseHeadersContainer.innerHTML = ""
+  Object.entries(headers).forEach(([key, value]) => {
+    const keyElement = document.createElement('div')
+    keyElement.textContent = key
+    responseHeadersContainer.append(keyElement)
+    const valueElement = document.createElement('div')
+    valueElement.textContent = value
+    responseHeadersContainer.append(valueElement)
+  })
+}
 
 function createKeyValuePair() {
   const element = keyValueTemplate.content.cloneNode(true);
